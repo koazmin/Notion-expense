@@ -1,10 +1,12 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { Client as NotionClient } from "@notionhq/client";
 
+// Initialize Gemini and Notion clients using environment variables
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const notion = new NotionClient({ auth: process.env.NOTION_API_KEY });
 const NOTION_DATABASE_ID = process.env.NOTION_EXPENSE_DATABASE_ID;
 
+// Define valid types and categories for expense/income tracking
 const validTypes = ["Income", "Expense"];
 const validCategories = [
   "Food", "Transport", "Shopping", "Utilities", "Rent", "Salary",
@@ -12,7 +14,9 @@ const validCategories = [
   "Mahar Unity", "Bavin"
 ];
 
+// Main handler for the API route
 export default async function handler(req, res) {
+  // Only allow POST requests
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method Not Allowed" });
   }
@@ -20,13 +24,15 @@ export default async function handler(req, res) {
   try {
     const { audio, mimeType } = req.body;
 
+    // Validate incoming audio and mimeType
     if (!audio || !mimeType) {
       return res.status(400).json({ error: "Audio and mimeType are required." });
     }
 
-    // Use gemini-2.0-flash model here
+    // Get the Gemini-2.0-flash model for content generation
     const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
+    // Prepare the audio part for the Gemini prompt
     const audioPart = {
       inlineData: {
         data: audio,
@@ -34,6 +40,7 @@ export default async function handler(req, res) {
       },
     };
 
+    // Define the prompt for Gemini, instructing it to transcribe and extract JSON
     const prompt = `You will be given Burmese audio that describes either an income or an expense.
 First, transcribe the audio in Burmese. Then extract and return the following fields as JSON.
 
@@ -45,7 +52,7 @@ Only use the following values for each field:
 - "date": format as YYYY-MM-DD (if not found, use today's date)
 - "note": short description in Burmese
 
-Respond with only the JSON object in this format:
+Respond with only the JSON object in this format, do not include any additional text or markdown formatting around the JSON:
 {
   "type": "Expense",
   "amount": 15000,
@@ -54,27 +61,42 @@ Respond with only the JSON object in this format:
   "note": "နံနက်စာအတွက်"
 }`;
 
+    // Generate content using Gemini model with the prompt and audio
     const result = await model.generateContent([prompt, audioPart]);
     const response = result.response;
-    const outputText = response.text();
+    let outputText = response.text(); // Get the raw text output from Gemini
 
     let expenseData;
     try {
+      // REGEX to extract JSON:
+      // It looks for an optional markdown code block start (```json or ```)
+      // then captures any characters (non-greedy) until an optional markdown code block end (```)
+      const jsonMatch = outputText.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+      if (jsonMatch && jsonMatch[1]) {
+        // If markdown block found, use the captured content
+        outputText = jsonMatch[1];
+      } else {
+        // If no markdown block, try to clean up leading/trailing whitespace
+        outputText = outputText.trim();
+      }
+
+      // Attempt to parse the extracted/cleaned JSON string
       expenseData = JSON.parse(outputText);
     } catch (err) {
-      console.error("Failed to parse JSON from Gemini:", outputText);
-      return res.status(500).json({ error: "Gemini response was not valid JSON.", details: outputText });
+      console.error("Failed to parse JSON from Gemini. Raw output:", outputText);
+      return res.status(500).json({ error: "Gemini response was not valid JSON or contained unexpected characters.", details: outputText });
     }
 
+    // Validate the extracted type and category against predefined valid values
     if (!validTypes.includes(expenseData.type) || !validCategories.includes(expenseData.category)) {
-      return res.status(400).json({ error: "Invalid type or category.", details: expenseData });
+      return res.status(400).json({ error: "Invalid type or category received from Gemini.", details: expenseData });
     }
 
-    // Save to Notion
+    // Save the extracted data to Notion
     const notionResponse = await notion.pages.create({
       parent: { database_id: NOTION_DATABASE_ID },
       properties: {
-        "Name": { title: [{ text: { content: expenseData.note || "Expense" } }] },
+        "Name": { title: [{ text: { content: expenseData.note || (expenseData.type === "Income" ? "Income" : "Expense") } }] },
         "Type": { select: { name: expenseData.type } },
         "Amount": { number: expenseData.amount },
         "Category": { select: { name: expenseData.category } },
@@ -82,9 +104,11 @@ Respond with only the JSON object in this format:
       },
     });
 
+    // Send success response with Notion page ID and parsed data
     res.status(200).json({ notionPageId: notionResponse.id, data: expenseData });
   } catch (error) {
     console.error("API Error:", error);
+    // Send error response
     res.status(500).json({ error: "Failed to process request.", details: error.message });
   }
 }
