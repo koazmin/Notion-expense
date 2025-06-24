@@ -37,10 +37,7 @@ export default async function handler(req, res) {
         // You might consider adding a separate "Notes" rich_text property in your Notion database
         // if 'note' is meant to be a longer description separate from the title.
         // For simplicity, it's currently used as the title and could be appended to "Notes" if a Notion prop exists.
-        // For now, let's assume 'notes' is primarily for the Name/Title and potentially a Rich Text field.
-        // If your Notion DB has a 'Notes' field as Rich Text, you'd add:
-        // "Notes": { rich_text: [{ text: { content: extractedData.note } }] }
-        // For this example, we'll ensure 'Name' always has content and assume 'note' populates it.
+        // For now, we'll ensure 'Name' always has content and assume 'note' populates it.
     }
 
 
