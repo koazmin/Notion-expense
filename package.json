@@ -1,0 +1,12 @@
+{
+  "name": "burmese-voice-expense-tracker",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "vercel dev"
+  },
+  "type": "module",
+  "dependencies": {
+    "@google/generative-ai": "^0.14.1",
+    "@notionhq/client": "^2.2.14"
+  }
+}
