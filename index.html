@@ -113,8 +113,6 @@
                 </svg>
                 Stop Recording
             </button>
-
-            <!-- Removed the Transcribe & Extract Button -->
         </div>
 
         <audio id="audioPlayer" class="w-full mt-4 hidden" controls></audio>
@@ -200,14 +198,13 @@
         // DOM Elements
         const startRecordBtn = document.getElementById('startRecord');
         const stopRecordBtn = document.getElementById('stopRecord');
-        // Removed transcribeExtractBtn as it's no longer needed
         const audioPlayer = document.getElementById('audioPlayer');
-        const transcriptInput = document.getElementById('transcriptInput'); // Original text/transcript
+        const transcriptInput = document.getElementById('transcriptInput');
         const amountInput = document.getElementById('amountInput');
         const typeInput = document.getElementById('typeInput');
         const categoryInput = document.getElementById('categoryInput');
         const dateInput = document.getElementById('dateInput');
-        const notesInput = document.getElementById('notesInput'); // For additional notes
+        const notesInput = document.getElementById('notesInput');
         const statusMessage = document.getElementById('statusMessage');
         const copyOriginalTextBtn = document.getElementById('copyOriginalTextBtn');
         const saveToNotionBtn = document.getElementById('saveToNotionBtn');
@@ -234,7 +231,7 @@
                                     typeInput.value.trim() !== '' &&
                                     categoryInput.value.trim() !== '' &&
                                     dateInput.value.trim() !== '' &&
-                                    isAmountValid; // Ensure amount is valid here too
+                                    isAmountValid;
 
             if (areFieldsFilled) {
                 saveToNotionBtn.disabled = false;
@@ -244,7 +241,6 @@
                 saveToNotionBtn.classList.add('opacity-50', 'cursor-not-allowed');
             }
 
-            // Enable copy button only if original transcript (or any text) exists
             if (transcriptInput.value.trim() !== '') {
                 copyOriginalTextBtn.disabled = false;
                 copyOriginalTextBtn.classList.remove('opacity-50', 'cursor-not-allowed');
@@ -252,137 +248,121 @@
                 copyOriginalTextBtn.disabled = true;
                 copyOriginalTextBtn.classList.add('opacity-50', 'cursor-not-allowed');
             }
+            console.log("Save button status checked. Enabled:", !saveToNotionBtn.disabled);
         }
-
 
         // Function to update button states and messages
         function updateUI(state) {
-            // Disable all buttons initially
+            console.log("Updating UI state to:", state);
             startRecordBtn.disabled = true;
             stopRecordBtn.disabled = true;
-            // Removed transcribeExtractBtn from this function as it's gone
             copyOriginalTextBtn.disabled = true;
             saveToNotionBtn.disabled = true;
 
-            // Add opacity and cursor styles for disabled state
             startRecordBtn.classList.add('opacity-50', 'cursor-not-allowed');
             stopRecordBtn.classList.add('opacity-50', 'cursor-not-allowed');
             copyOriginalTextBtn.classList.add('opacity-50', 'cursor-not-allowed');
             saveToNotionBtn.classList.add('opacity-50', 'cursor-not-allowed');
 
-            startRecordBtn.classList.remove('recording-indicator'); // Stop pulse animation
+            startRecordBtn.classList.remove('recording-indicator');
 
-            audioPlayer.src = ''; // Clear previous audio src
+            audioPlayer.src = '';
             if (audioUrl) {
-                URL.revokeObjectURL(audioUrl); // Clean up previous object URL
+                URL.revokeObjectURL(audioUrl);
                 audioUrl = null;
             }
 
             switch (state) {
                 case 'ready':
-                    // Ready to start a new recording
                     startRecordBtn.disabled = false;
                     startRecordBtn.classList.remove('opacity-50', 'cursor-not-allowed');
                     statusMessage.textContent = 'Ready to record your transaction voice note.';
-                    // Clear all input fields and reset to defaults
                     transcriptInput.value = '';
                     amountInput.value = '';
-                    typeInput.value = 'Expense'; // Default to Expense
-                    categoryInput.value = 'Other'; // Default category
-                    dateInput.value = getTodayDateString(); // Set to today's date
+                    typeInput.value = 'Expense';
+                    categoryInput.value = 'Other';
+                    dateInput.value = getTodayDateString();
                     notesInput.value = '';
-                    audioBlob = null; // Clear recorded audio
+                    audioBlob = null;
                     audioChunks = [];
-                    checkSaveButtonStatus(); // Re-check save button status on reset
                     break;
                 case 'recording':
-                    // Currently recording
                     stopRecordBtn.disabled = false;
                     stopRecordBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-                    startRecordBtn.classList.add('recording-indicator'); // Start pulse animation
+                    startRecordBtn.classList.add('recording-indicator');
                     statusMessage.textContent = 'Recording... Describe your expense or income!';
-                    // Clear fields when a new recording starts
                     transcriptInput.value = '';
                     amountInput.value = '';
                     notesInput.value = '';
-                    checkSaveButtonStatus(); // Re-check save button status during recording (might become disabled)
                     break;
-                case 'processing_audio': // New state for direct processing after stopping
+                case 'processing_audio':
                     statusMessage.textContent = 'Processing audio (transcribing & extracting data)... Please wait.';
                     transcriptInput.value = 'Processing audio...';
                     amountInput.value = '';
                     notesInput.value = '';
-                    checkSaveButtonStatus(); // Ensure save button is disabled during processing
                     break;
                 case 'data_ready_for_review':
-                    // Data has been extracted and is ready for user review/editing
-                    startRecordBtn.disabled = false; // Allow starting a new recording
+                    startRecordBtn.disabled = false;
                     startRecordBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-                    checkSaveButtonStatus(); // Enable Save and Copy based on populated fields
                     statusMessage.textContent = 'Transaction details ready for review. Edit fields and save to Notion.';
                     break;
                 case 'saving_to_notion':
-                    // Data is being sent to Notion
                     statusMessage.textContent = 'Saving transaction to Notion...';
-                    saveToNotionBtn.disabled = true; // Disable save button to prevent multiple submissions
+                    saveToNotionBtn.disabled = true;
                     saveToNotionBtn.classList.add('opacity-50', 'cursor-not-allowed');
                     break;
                 case 'saved':
-                    // Transaction successfully saved
                     statusMessage.textContent = 'Successfully saved to Notion!';
-                    updateUI('ready'); // Reset UI for a new transaction
+                    updateUI('ready');
                     break;
                 case 'error':
-                    // An error occurred at some stage
                     statusMessage.textContent = 'An error occurred. Please try again.';
-                    startRecordBtn.disabled = false; // Allow retrying recording
+                    startRecordBtn.disabled = false;
                     startRecordBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-                    checkSaveButtonStatus(); // Re-check save/copy buttons, might be re-enabled if partial data exists
                     break;
             }
+            checkSaveButtonStatus(); // Always call this after updating UI state to ensure correct button status
         }
 
         // Initialize UI on load
         document.addEventListener('DOMContentLoaded', () => {
             updateUI('ready');
-            // Add event listeners for manual input changes to enable/disable Save button dynamically
             [transcriptInput, amountInput, typeInput, categoryInput, dateInput, notesInput].forEach(input => {
                 input.addEventListener('input', checkSaveButtonStatus);
             });
         });
 
-        // Event listener for starting recording
         startRecordBtn.addEventListener('click', async () => {
+            console.log("Start Recording button clicked.");
             try {
-                // Request microphone access
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                 mediaRecorder = new MediaRecorder(stream);
-                audioChunks = []; // Reset audio chunks for new recording
+                audioChunks = [];
 
-                // Collect audio data chunks
                 mediaRecorder.ondataavailable = event => {
+                    console.log("Audio data available:", event.data.size, "bytes");
                     audioChunks.push(event.data);
                 };
 
-                // When recording stops, create a Blob and URL, then immediately process
                 mediaRecorder.onstop = async () => {
+                    console.log("MediaRecorder stopped.");
                     audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
                     if (audioBlob.size === 0) {
                         console.error('Recorded audio Blob is empty!');
                         statusMessage.textContent = 'Recording failed: No audio captured. Try again.';
                         updateUI('error');
-                        stream.getTracks().forEach(track => track.stop()); // Stop all tracks
+                        stream.getTracks().forEach(track => track.stop());
                         return;
                     }
 
                     audioUrl = URL.createObjectURL(audioBlob);
                     console.log('Audio Blob created:', audioBlob.type, audioBlob.size, 'bytes. URL:', audioUrl);
-                    // Immediately trigger processing after recording stops
-                    processRecordedAudio(audioBlob, stream);
+                    await processRecordedAudio(audioBlob, stream); // Await this call
                 };
 
-                mediaRecorder.start(); // Start the recording
-                updateUI('recording'); // Update UI to 'recording' state
+                mediaRecorder.start();
+                console.log("MediaRecorder started.");
+                updateUI('recording');
 
             } catch (err) {
                 console.error('Error accessing microphone:', err);
@@ -391,39 +371,41 @@
             }
         });
 
-        // Event listener for stopping recording
         stopRecordBtn.addEventListener('click', () => {
+            console.log("Stop Recording button clicked.");
             if (mediaRecorder && mediaRecorder.state === 'recording') {
-                mediaRecorder.stop(); // Stop the media recorder
+                mediaRecorder.stop();
+            } else {
+                console.warn("Stop button clicked but mediaRecorder is not recording.");
             }
         });
 
-        // Function to process recorded audio (transcribe and extract)
         async function processRecordedAudio(blob, stream) {
-            updateUI('processing_audio'); // Set UI to 'processing_audio' state
+            console.log("Starting processRecordedAudio function.");
+            updateUI('processing_audio');
 
             const reader = new FileReader();
-            reader.readAsDataURL(blob); // Read the audio blob as Data URL
+            reader.readAsDataURL(blob);
             reader.onloadend = async () => {
-                const base64Audio = reader.result.split(',')[1]; // Extract base64 part
+                const base64Audio = reader.result.split(',')[1];
+                console.log("Audio converted to base64. Sending to API.");
 
                 try {
-                    // Call the unified API endpoint for transcription and extraction
                     const response = await fetch('/api/voice-expense', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
                         },
                         body: JSON.stringify({
-                            audio: base64Audio, // Send audio for transcription
+                            audio: base64Audio,
                             mimeType: blob.type,
                         }),
                     });
 
                     const data = await response.json();
+                    console.log("API response received:", data);
 
                     if (response.ok && data.originalTranscript && data.extractedData) {
-                        // Populate the form fields with the extracted data from the API
                         transcriptInput.value = data.originalTranscript || 'No original transcript returned.';
                         amountInput.value = data.extractedData.amount;
                         typeInput.value = data.extractedData.type;
@@ -431,14 +413,14 @@
                         dateInput.value = data.extractedData.date;
                         notesInput.value = data.extractedData.note || data.originalTranscript;
 
-                        updateUI('data_ready_for_review'); // Update UI state
+                        console.log("Fields populated with extracted data.");
+                        updateUI('data_ready_for_review');
                     } else {
                         throw new Error(data.error || 'Unknown error or unexpected response structure from API.');
                     }
                 } catch (error) {
-                    console.error('Error sending audio to API for processing:', error);
+                    console.error('Error in processRecordedAudio API call:', error);
                     statusMessage.textContent = `Error processing audio: ${error.message}`;
-                    // Reset fields and UI on error
                     transcriptInput.value = '';
                     amountInput.value = '';
                     typeInput.value = 'Expense';
@@ -447,19 +429,20 @@
                     notesInput.value = '';
                     updateUI('error');
                 } finally {
-                    stream.getTracks().forEach(track => track.stop()); // Ensure microphone track is stopped
+                    console.log("Ensuring microphone stream is stopped.");
+                    stream.getTracks().forEach(track => track.stop());
                 }
             };
             reader.onerror = (error) => {
                 console.error('Error reading audio Blob:', error);
                 statusMessage.textContent = 'Error processing audio for transcription.';
                 updateUI('error');
-                stream.getTracks().forEach(track => track.stop()); // Ensure microphone track is stopped
+                stream.getTracks().forEach(track => track.stop());
             };
         }
 
-        // Event listener for Copy Original Text button
         copyOriginalTextBtn.addEventListener('click', () => {
+            console.log("Copy Original Text button clicked.");
             if (transcriptInput.value.trim() !== '') {
                 transcriptInput.select();
                 transcriptInput.setSelectionRange(0, 99999);
@@ -479,39 +462,36 @@
             }
         });
 
-        // Event listener for Save to Notion button
         saveToNotionBtn.addEventListener('click', async () => {
-            // Get current values from the editable form fields
+            console.log("Save to Notion button clicked.");
             const manualAmount = parseFloat(amountInput.value);
             const manualType = typeInput.value;
             const manualCategory = categoryInput.value;
             const manualDate = dateInput.value;
             const manualNotes = notesInput.value.trim();
-            const originalTranscript = transcriptInput.value.trim(); // The raw voice note/text field content
+            const originalTranscript = transcriptInput.value.trim();
 
-            // Basic validation for form inputs before saving
             if (isNaN(manualAmount) || manualAmount <= 0) {
                 statusMessage.textContent = 'Please enter a valid amount greater than 0.';
+                console.warn("Validation failed: Invalid amount.");
                 return;
             }
 
             if (!manualType || !manualCategory || !manualDate) {
                 statusMessage.textContent = 'Please ensure Type, Category, and Date are selected.';
+                console.warn("Validation failed: Missing type, category, or date.");
                 return;
             }
 
-            updateUI('saving_to_notion'); // Set UI to 'saving' state
+            updateUI('saving_to_notion');
 
             try {
-                // Call the unified API endpoint for saving the transaction
                 const response = await fetch('/api/voice-expense', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
-                        // Send the current, potentially edited values from the form
-                        // No audio is sent here, indicating a save operation to the backend
                         transcript: originalTranscript,
                         extractedData: {
                             amount: manualAmount,
@@ -524,17 +504,18 @@
                 });
 
                 const data = await response.json();
+                console.log("Save API response received:", data);
 
                 if (response.ok) {
                     statusMessage.textContent = `Saved "${data.extractedData.type}: ${data.extractedData.amount}" to Notion!`;
-                    updateUI('saved'); // Update UI to 'saved' state, then reset
+                    updateUI('saved');
                 } else {
                     throw new Error(data.error || 'Unknown error from API.');
                 }
             } catch (error) {
                 console.error('Error saving data to Notion:', error);
                 statusMessage.textContent = `Error saving: ${error.message}`;
-                updateUI('error'); // Update UI to 'error' state
+                updateUI('error');
             }
         });
     </script>
