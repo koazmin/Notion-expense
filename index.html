@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Burmese Voice Expense Tracker</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-100 min-h-screen flex items-center justify-center">
+  <div class="bg-white shadow-lg rounded-xl p-6 w-full max-w-md">
+    <h1 class="text-xl font-bold text-gray-800 mb-4 text-center">Burmese Voice Expense Tracker</h1>
+
+    <div id="statusMessage" class="text-center text-sm mb-2 text-gray-600">Ready to record.</div>
+
+    <div class="flex gap-2 justify-center mb-4">
+      <button id="startBtn" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Start Recording</button>
+      <button id="stopBtn" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600" disabled>Stop</button>
+    </div>
+
+    <textarea id="resultOutput" class="w-full p-2 border rounded text-sm h-40" placeholder="Result will appear here..." readonly></textarea>
+  </div>
+
+  <script>
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const statusMessage = document.getElementById('statusMessage');
+    const resultOutput = document.getElementById('resultOutput');
+
+    let mediaRecorder;
+    let audioChunks = [];
+
+    startBtn.onclick = async () => {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorder = new MediaRecorder(stream);
+      audioChunks = [];
+
+      mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+
+      mediaRecorder.onstop = async () => {
+        const blob = new Blob(audioChunks, { type: 'audio/webm' });
+        const reader = new FileReader();
+        reader.readAsDataURL(blob);
+        reader.onloadend = async () => {
+          const base64Audio = reader.result.split(',')[1];
+          statusMessage.textContent = "Sending audio...";
+          resultOutput.value = '';
+
+          try {
+            const res = await fetch('/api/voice-expense', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ audio: base64Audio, mimeType: blob.type })
+            });
+            const data = await res.json();
+
+            if (res.ok) {
+              resultOutput.value = JSON.stringify(data.data, null, 2);
+              statusMessage.textContent = 'Saved to Notion ✅';
+            } else {
+              resultOutput.value = JSON.stringify(data, null, 2);
+              statusMessage.textContent = '❌ Error occurred';
+            }
+          } catch (err) {
+            console.error(err);
+            statusMessage.textContent = '❌ Error sending audio';
+          }
+        };
+      };
+
+      mediaRecorder.start();
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
+      statusMessage.textContent = "Recording...";
+    };
+
+    stopBtn.onclick = () => {
+      if (mediaRecorder && mediaRecorder.state === 'recording') {
+        mediaRecorder.stop();
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+        statusMessage.textContent = "Processing...";
+      }
+    };
+  </script>
+</body>
+
+</html>
