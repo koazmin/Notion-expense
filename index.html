@@ -114,16 +114,7 @@
                 Stop Recording
             </button>
 
-            <button id="transcribeExtractBtn" disabled
-                class="bg-blue-600 text-white px-6 py-3 rounded-xl shadow-lg opacity-50 cursor-not-allowed hover:bg-blue-700 focus:outline-none focus:ring-4 focus:ring-blue-300 flex items-center justify-center">
-                <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-                    xmlns="http://www.w3.org/2000/svg">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                        d="M8 7H5a2 2 0 00-2 2v6a2 2 0 002 2h3m0-1V7m0 0h8a2 2 0 012 2v6a2 2 0 01-2 2h-8m0-9v9m6-10l4 4-4 4">
-                    </path>
-                </svg>
-                Transcribe &amp; Extract
-            </button>
+            <!-- Removed the Transcribe & Extract Button -->
         </div>
 
         <audio id="audioPlayer" class="w-full mt-4 hidden" controls></audio>
@@ -209,7 +200,7 @@
         // DOM Elements
         const startRecordBtn = document.getElementById('startRecord');
         const stopRecordBtn = document.getElementById('stopRecord');
-        const transcribeExtractBtn = document.getElementById('transcribeExtractBtn');
+        // Removed transcribeExtractBtn as it's no longer needed
         const audioPlayer = document.getElementById('audioPlayer');
         const transcriptInput = document.getElementById('transcriptInput'); // Original text/transcript
         const amountInput = document.getElementById('amountInput');
@@ -236,19 +227,46 @@
             return `${year}-${month}-${day}`;
         }
 
+        // Function to check if required fields are filled and valid for saving
+        function checkSaveButtonStatus() {
+            const isAmountValid = !isNaN(parseFloat(amountInput.value)) && parseFloat(amountInput.value) > 0;
+            const areFieldsFilled = transcriptInput.value.trim() !== '' &&
+                                    typeInput.value.trim() !== '' &&
+                                    categoryInput.value.trim() !== '' &&
+                                    dateInput.value.trim() !== '' &&
+                                    isAmountValid; // Ensure amount is valid here too
+
+            if (areFieldsFilled) {
+                saveToNotionBtn.disabled = false;
+                saveToNotionBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            } else {
+                saveToNotionBtn.disabled = true;
+                saveToNotionBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            }
+
+            // Enable copy button only if original transcript (or any text) exists
+            if (transcriptInput.value.trim() !== '') {
+                copyOriginalTextBtn.disabled = false;
+                copyOriginalTextBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            } else {
+                copyOriginalTextBtn.disabled = true;
+                copyOriginalTextBtn.classList.add('opacity-50', 'cursor-not-allowed');
+            }
+        }
+
+
         // Function to update button states and messages
         function updateUI(state) {
             // Disable all buttons initially
             startRecordBtn.disabled = true;
             stopRecordBtn.disabled = true;
-            transcribeExtractBtn.disabled = true;
+            // Removed transcribeExtractBtn from this function as it's gone
             copyOriginalTextBtn.disabled = true;
             saveToNotionBtn.disabled = true;
 
             // Add opacity and cursor styles for disabled state
             startRecordBtn.classList.add('opacity-50', 'cursor-not-allowed');
             stopRecordBtn.classList.add('opacity-50', 'cursor-not-allowed');
-            transcribeExtractBtn.classList.add('opacity-50', 'cursor-not-allowed');
             copyOriginalTextBtn.classList.add('opacity-50', 'cursor-not-allowed');
             saveToNotionBtn.classList.add('opacity-50', 'cursor-not-allowed');
 
@@ -275,6 +293,7 @@
                     notesInput.value = '';
                     audioBlob = null; // Clear recorded audio
                     audioChunks = [];
+                    checkSaveButtonStatus(); // Re-check save button status on reset
                     break;
                 case 'recording':
                     // Currently recording
@@ -286,28 +305,20 @@
                     transcriptInput.value = '';
                     amountInput.value = '';
                     notesInput.value = '';
+                    checkSaveButtonStatus(); // Re-check save button status during recording (might become disabled)
                     break;
-                case 'recorded':
-                    // Recording stopped, ready for transcription
-                    transcribeExtractBtn.disabled = false;
-                    transcribeExtractBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-                    statusMessage.textContent = 'Recording stopped. Transcribe & Extract details.';
-                    break;
-                case 'transcribing':
-                    // Audio is being sent to API for transcription and extraction
-                    statusMessage.textContent = 'Transcribing and extracting data... Please wait.';
+                case 'processing_audio': // New state for direct processing after stopping
+                    statusMessage.textContent = 'Processing audio (transcribing & extracting data)... Please wait.';
                     transcriptInput.value = 'Processing audio...';
                     amountInput.value = '';
                     notesInput.value = '';
+                    checkSaveButtonStatus(); // Ensure save button is disabled during processing
                     break;
                 case 'data_ready_for_review':
                     // Data has been extracted and is ready for user review/editing
                     startRecordBtn.disabled = false; // Allow starting a new recording
                     startRecordBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-                    copyOriginalTextBtn.disabled = false;
-                    copyOriginalTextBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-                    // Save button will be enabled by the input event listener if data is valid
-                    // For now, it will be handled by the form validation in the input event listener.
+                    checkSaveButtonStatus(); // Enable Save and Copy based on populated fields
                     statusMessage.textContent = 'Transaction details ready for review. Edit fields and save to Notion.';
                     break;
                 case 'saving_to_notion':
@@ -326,17 +337,7 @@
                     statusMessage.textContent = 'An error occurred. Please try again.';
                     startRecordBtn.disabled = false; // Allow retrying recording
                     startRecordBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-                    // Re-enable save/copy buttons if there's data in fields to retry manual save/copy
-                    const isAmountValid = !isNaN(parseFloat(amountInput.value)) && parseFloat(amountInput.value) > 0;
-                    const areFieldsFilled = transcriptInput.value.trim() !== '' && typeInput.value.trim() !== '' && categoryInput.value.trim() !== '' && dateInput.value.trim() !== '';
-                    if (isAmountValid && areFieldsFilled) {
-                        saveToNotionBtn.disabled = false;
-                        saveToNotionBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-                    }
-                    if (transcriptInput.value.trim() !== '') {
-                        copyOriginalTextBtn.disabled = false;
-                        copyOriginalTextBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-                    }
+                    checkSaveButtonStatus(); // Re-check save/copy buttons, might be re-enabled if partial data exists
                     break;
             }
         }
@@ -346,27 +347,7 @@
             updateUI('ready');
             // Add event listeners for manual input changes to enable/disable Save button dynamically
             [transcriptInput, amountInput, typeInput, categoryInput, dateInput, notesInput].forEach(input => {
-                input.addEventListener('input', () => {
-                    const isAmountValid = !isNaN(parseFloat(amountInput.value)) && parseFloat(amountInput.value) > 0;
-                    // Check if transcript (or amount) and other key fields are filled for saving
-                    const areFieldsFilled = transcriptInput.value.trim() !== '' && typeInput.value.trim() !== '' && categoryInput.value.trim() !== '' && dateInput.value.trim() !== '';
-
-                    if (isAmountValid && areFieldsFilled) {
-                        saveToNotionBtn.disabled = false;
-                        saveToNotionBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-                    } else {
-                        saveToNotionBtn.disabled = true;
-                        saveToNotionBtn.classList.add('opacity-50', 'cursor-not-allowed');
-                    }
-                    // Enable copy button only if original transcript (or any text) exists
-                    if (transcriptInput.value.trim() !== '') {
-                        copyOriginalTextBtn.disabled = false;
-                        copyOriginalTextBtn.classList.remove('opacity-50', 'cursor-not-allowed');
-                    } else {
-                        copyOriginalTextBtn.disabled = true;
-                        copyOriginalTextBtn.classList.add('opacity-50', 'cursor-not-allowed');
-                    }
-                });
+                input.addEventListener('input', checkSaveButtonStatus);
             });
         });
 
@@ -383,8 +364,8 @@
                     audioChunks.push(event.data);
                 };
 
-                // When recording stops, create a Blob and URL
-                mediaRecorder.onstop = () => {
+                // When recording stops, create a Blob and URL, then immediately process
+                mediaRecorder.onstop = async () => {
                     audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
                     if (audioBlob.size === 0) {
                         console.error('Recorded audio Blob is empty!');
@@ -396,8 +377,8 @@
 
                     audioUrl = URL.createObjectURL(audioBlob);
                     console.log('Audio Blob created:', audioBlob.type, audioBlob.size, 'bytes. URL:', audioUrl);
-                    updateUI('recorded'); // Update UI to 'recorded' state
-                    stream.getTracks().forEach(track => track.stop()); // Stop all tracks to release microphone
+                    // Immediately trigger processing after recording stops
+                    processRecordedAudio(audioBlob, stream);
                 };
 
                 mediaRecorder.start(); // Start the recording
@@ -417,47 +398,41 @@
             }
         });
 
-        // Event listener for Transcribe & Extract button
-        transcribeExtractBtn.addEventListener('click', async () => {
-            if (!audioBlob) {
-                statusMessage.textContent = 'No audio recorded to process.';
-                return;
-            }
-
-            updateUI('transcribing'); // Set UI to 'transcribing' state
+        // Function to process recorded audio (transcribe and extract)
+        async function processRecordedAudio(blob, stream) {
+            updateUI('processing_audio'); // Set UI to 'processing_audio' state
 
             const reader = new FileReader();
-            reader.readAsDataURL(audioBlob); // Read the audio blob as Data URL
+            reader.readAsDataURL(blob); // Read the audio blob as Data URL
             reader.onloadend = async () => {
                 const base64Audio = reader.result.split(',')[1]; // Extract base64 part
 
                 try {
-                    // Call the single API endpoint for transcription and extraction
-                    const response = await fetch('/api/voice-expense', { // Calling the unified API
+                    // Call the unified API endpoint for transcription and extraction
+                    const response = await fetch('/api/voice-expense', {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',
                         },
                         body: JSON.stringify({
                             audio: base64Audio, // Send audio for transcription
-                            mimeType: audioBlob.type,
+                            mimeType: blob.type,
                         }),
                     });
 
                     const data = await response.json();
 
-                    if (response.ok && data.originalTranscript && data.extractedData) { // Check for expected response structure
+                    if (response.ok && data.originalTranscript && data.extractedData) {
                         // Populate the form fields with the extracted data from the API
                         transcriptInput.value = data.originalTranscript || 'No original transcript returned.';
                         amountInput.value = data.extractedData.amount;
                         typeInput.value = data.extractedData.type;
                         categoryInput.value = data.extractedData.category;
                         dateInput.value = data.extractedData.date;
-                        notesInput.value = data.extractedData.note || data.originalTranscript; // Use 'note' or original transcript for additional notes
+                        notesInput.value = data.extractedData.note || data.originalTranscript;
 
-                        updateUI('data_ready_for_review'); // Update UI to 'data_ready_for_review' state
+                        updateUI('data_ready_for_review'); // Update UI state
                     } else {
-                        // If response is not ok or missing expected data, treat as error
                         throw new Error(data.error || 'Unknown error or unexpected response structure from API.');
                     }
                 } catch (error) {
@@ -471,14 +446,17 @@
                     dateInput.value = getTodayDateString();
                     notesInput.value = '';
                     updateUI('error');
+                } finally {
+                    stream.getTracks().forEach(track => track.stop()); // Ensure microphone track is stopped
                 }
             };
             reader.onerror = (error) => {
                 console.error('Error reading audio Blob:', error);
                 statusMessage.textContent = 'Error processing audio for transcription.';
                 updateUI('error');
+                stream.getTracks().forEach(track => track.stop()); // Ensure microphone track is stopped
             };
-        });
+        }
 
         // Event listener for Copy Original Text button
         copyOriginalTextBtn.addEventListener('click', () => {
@@ -526,7 +504,7 @@
 
             try {
                 // Call the unified API endpoint for saving the transaction
-                const response = await fetch('/api/voice-expense', { // Calling the unified API
+                const response = await fetch('/api/voice-expense', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
