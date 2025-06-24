@@ -14,6 +14,15 @@ const validCategories = [
   "Mahar Unity", "Bavin"
 ];
 
+// Helper function to get today's date in YYYY-MM-DD format
+function getTodayDate() {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0'); // Months are 0-indexed
+  const day = String(today.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 // Main handler for the API route
 export default async function handler(req, res) {
   // Only allow POST requests
@@ -41,6 +50,7 @@ export default async function handler(req, res) {
     };
 
     // Define the prompt for Gemini, instructing it to transcribe and extract JSON
+    // The prompt now explicitly states to *only* include the date if mentioned.
     const prompt = `You will be given Burmese audio that describes either an income or an expense.
 First, transcribe the audio in Burmese. Then extract and return the following fields as JSON.
 
@@ -49,7 +59,7 @@ Only use the following values for each field:
 - "type": must be either "Income" or "Expense"
 - "category": choose only one from: Food, Transport, Shopping, Utilities, Rent, Salary, Gift, Entertainment, Healthcare, Education, Other, Mahar Unity, Bavin
 - "amount": number (e.g. 15000)
-- "date": format as YYYY-MM-DD (if not found, use today's date)
+- "date": format as YYYY-MM-DD. ONLY include this field if a date is explicitly mentioned in the audio. Do NOT infer or use today's date if it's not mentioned.
 - "note": short description in Burmese
 
 Respond with only the JSON object in this format, do not include any additional text or markdown formatting around the JSON:
@@ -57,7 +67,7 @@ Respond with only the JSON object in this format, do not include any additional 
   "type": "Expense",
   "amount": 15000,
   "category": "Food",
-  "date": "2025-06-24",
+  "date": "2025-06-24", // Example date if explicitly mentioned
   "note": "နံနက်စာအတွက်"
 }`;
 
@@ -86,6 +96,13 @@ Respond with only the JSON object in this format, do not include any additional 
       console.error("Failed to parse JSON from Gemini. Raw output:", outputText);
       return res.status(500).json({ error: "Gemini response was not valid JSON or contained unexpected characters.", details: outputText });
     }
+
+    // --- NEW DATE HANDLING LOGIC ---
+    // Validate the date. If not present or invalid, set to today's date.
+    if (!expenseData.date || !/^\d{4}-\d{2}-\d{2}$/.test(expenseData.date)) {
+      expenseData.date = getTodayDate();
+    }
+    // --- END NEW DATE HANDLING LOGIC ---
 
     // Validate the extracted type and category against predefined valid values
     if (!validTypes.includes(expenseData.type) || !validCategories.includes(expenseData.category)) {
