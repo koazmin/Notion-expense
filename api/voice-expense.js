@@ -16,11 +16,16 @@ const validCategories = [
 ];
 
 // Helper function to get today's date in YYYY-MM-DD format.
+// This is critical for consistent date representation.
 function getTodayDate() {
   const today = new Date();
-  const year = today.getFullYear();
-  const month = String(today.getMonth() + 1).padStart(2, '0'); // Months are 0-indexed
-  const day = String(today.getDate()).padStart(2, '0');
+  // Adjust for local timezone offset to ensure "today" is consistent with local time.
+  const offset = today.getTimezoneOffset(); // Get timezone offset in minutes
+  const localDate = new Date(today.getTime() - (offset * 60 * 1000)); // Apply offset to get UTC equivalent of local date
+
+  const year = localDate.getFullYear();
+  const month = String(localDate.getMonth() + 1).padStart(2, '0'); // Months are 0-indexed
+  const day = String(localDate.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
 }
 
@@ -35,7 +40,7 @@ export default async function handler(req, res) {
 
     // --- SCENARIO 1: Handle Audio Transcription and Data Extraction ---
     if (audio && mimeType) {
-      // This is a request to transcribe audio and extract data.
+      console.log("API received audio for transcription and extraction.");
       const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
       const audioPart = {
         inlineData: {
@@ -60,13 +65,14 @@ Respond with ONLY the JSON object in this format. Do not include any additional 
   "type": "Expense",
   "amount": 15000,
   "category": "Food",
-  "date": "2025-06-24",
+  "date": "2025-06-24", // Example date if explicitly mentioned
   "note": "နံနက်စာအတွက်"
 }`;
 
       const result = await model.generateContent([prompt, audioPart]);
       const response = result.response;
       let geminiOutputText = response.text();
+      console.log("Gemini raw output:", geminiOutputText); // Log raw output from Gemini
 
       let extractedDataFromGemini;
       let originalTranscriptFromGemini = "";
@@ -80,6 +86,7 @@ Respond with ONLY the JSON object in this format. Do not include any additional 
         }
 
         extractedDataFromGemini = JSON.parse(geminiOutputText);
+        console.log("Extracted data after JSON parse:", extractedDataFromGemini);
 
         if (!validTypes.includes(extractedDataFromGemini.type)) {
           console.warn(`Gemini returned invalid type: ${extractedDataFromGemini.type}. Defaulting to 'Expense'.`);
@@ -92,9 +99,23 @@ Respond with ONLY the JSON object in this format. Do not include any additional 
 
         originalTranscriptFromGemini = extractedDataFromGemini.note || "No clear transcription available.";
 
+        // --- ENHANCED DATE HANDLING ---
+        const todayDate = getTodayDate(); // Get current date once
+        console.log("Today's date (server-side):", todayDate);
+        console.log("Date extracted from Gemini (before validation):", extractedDataFromGemini.date);
+
+        // Validate if the date exists and matches the YYYY-MM-DD format
         if (!extractedDataFromGemini.date || !/^\d{4}-\d{2}-\d{2}$/.test(extractedDataFromGemini.date)) {
-          extractedDataFromGemini.date = getTodayDate();
+            console.log("Gemini date invalid or not provided. Falling back to today's date.");
+            extractedDataFromGemini.date = todayDate;
+        } else {
+            // Optional: You might want to parse and re-format the date from Gemini
+            // to ensure it's strictly YYYY-MM-DD, even if Gemini provides it slightly differently.
+            // For now, if it matches the regex, we assume it's good.
+            console.log("Gemini date is valid.");
         }
+        console.log("Final date after processing:", extractedDataFromGemini.date);
+        // --- END ENHANCED DATE HANDLING ---
 
       } catch (err) {
         console.error("Failed to parse JSON from Gemini or process data. Raw output:", geminiOutputText, "Error:", err);
@@ -102,19 +123,18 @@ Respond with ONLY the JSON object in this format. Do not include any additional 
           type: "Expense",
           amount: 0,
           category: "Other",
-          date: getTodayDate(),
+          date: getTodayDate(), // Fallback for entire parsing failure
           note: "Error transcribing or extracting. Please edit manually."
         };
         originalTranscriptFromGemini = `Error: ${err.message}. Raw Gemini output: ${geminiOutputText}`;
       }
 
-      // Send the original transcript and extracted data back to the frontend for review
       return res.status(200).json({ originalTranscript: originalTranscriptFromGemini, extractedData: extractedDataFromGemini });
 
     }
     // --- SCENARIO 2: Handle Saving Edited Data to Notion ---
     else if (extractedData) {
-      // This is a request to save already processed/edited data to Notion.
+      console.log("API received data for saving to Notion.");
       // `transcript` is also passed for potential use in the Notion "Name" field.
 
       // Basic validation of the incoming data structure
@@ -122,22 +142,30 @@ Respond with ONLY the JSON object in this format. Do not include any additional 
         return res.status(400).json({ error: "Invalid or incomplete transaction data provided for saving.", details: extractedData });
       }
 
+      // Ensure the amount is a valid number, even if it comes from a text input
+      const amountToSave = parseFloat(extractedData.amount);
+      if (isNaN(amountToSave)) {
+          return res.status(400).json({ error: "Invalid amount provided for saving.", details: extractedData });
+      }
+
       // Prepare data for Notion API call
       const notionProperties = {
         "Name": { title: [{ text: { content: extractedData.note || transcript || "Transaction" } }] },
         "Type": { select: { name: extractedData.type } },
-        "Amount": { number: parseFloat(extractedData.amount) },
+        "Amount": { number: amountToSave },
         "Category": { select: { name: extractedData.category } },
         "Date": { date: { start: extractedData.date } },
       };
+
+      console.log("Data to be sent to Notion:", notionProperties); // Log data before sending to Notion
 
       // Create a new page (entry) in the specified Notion database
       const notionResponse = await notion.pages.create({
         parent: { database_id: NOTION_DATABASE_ID },
         properties: notionProperties,
       });
+      console.log("Notion API response:", notionResponse);
 
-      // Send a success response with the Notion page ID and the data that was saved.
       return res.status(200).json({ notionPageId: notionResponse.id, extractedData });
 
     }
@@ -147,7 +175,7 @@ Respond with ONLY the JSON object in this format. Do not include any additional 
     }
 
   } catch (error) {
-    console.error("API Error in voice-expense.js:", error);
+    console.error("API Error in voice-expense.js (outer catch):", error);
     res.status(500).json({ error: "Failed to process request.", details: error.message });
   }
 }
