@@ -37,7 +37,7 @@ export default async function handler(req, res) {
     // --- SCENARIO 1: Transcribe & Extract Data from Audio ---
     if (audio && mimeType) {
       console.log("API received English audio input.");
-      const audioModel = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+      const audioModel = genAI.getGenerativeModel({ model: "gemini-2.0-Pro" });
 
       const audioPart = {
         inlineData: {
