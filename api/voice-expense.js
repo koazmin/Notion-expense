@@ -73,6 +73,7 @@ export default async function handler(req, res) {
                 console.log("Extracting data from corrected transcript...");
                 const extractionPrompt = `You will be given Burmese text that describes either an income or an expense.
 First, confirm the text is in Burmese. Then extract and return the following fields as JSON.
+Note that Bavin (ဘာဗင်) is my business, one of the categories, and transcribe correctly for the voice input for this.
 
 Only use the following values for each field:
 
