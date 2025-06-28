@@ -11,7 +11,8 @@ const validTypes = ["Income", "Expense"];
 const validCategories = [
     "Food", "Transport", "Shopping", "Utilities", "Rent", "Salary",
     "Gift", "Entertainment", "Healthcare", "Education", "Other",
-    "Mahar Unity", "Bavin"
+    "Mahar Unity", // English key for the category
+    "Bavin"         // English key for the category
 ];
 
 // Helper function to get today's date in YYYY-MM-DD format.
@@ -40,7 +41,7 @@ export default async function handler(req, res) {
         if (audio && mimeType) {
             console.log("API received audio for transcription and extraction.");
             // Using the same model for audio and subsequent text processing for simplicity
-            const audioModel = genAI.getGenerativeModel({ model: "gemini-2.5-flash" }); 
+            const audioModel = genAI.getGenerativeModel({ model: "gemini-1.5-flash" }); // Keeping gemini-1.5-flash
 
             const audioPart = {
                 inlineData: {
@@ -56,16 +57,17 @@ export default async function handler(req, res) {
             try {
                 // Step 1: Transcribe the audio to get raw text
                 console.log("Transcribing audio...");
-                const transcriptionPrompt = "Transcribe the following Burmese audio clearly and accurately.";
+                // **MODIFIED:** Added specific instruction for "ဘာဗင်" and "မဟာယူနတီ"
+                const transcriptionPrompt = "Transcribe the following Burmese audio clearly and accurately. Pay special attention to the word 'Bavin', which should be transcribed as 'ဘာဗင်'. Also, if 'Mahar Unity' is mentioned, transcribe it as 'မဟာယူနတီ'.";
                 const transcriptionResult = await audioModel.generateContent([transcriptionPrompt, audioPart]);
                 rawTranscript = transcriptionResult.response.text();
                 console.log("Raw Transcript:", rawTranscript);
 
                 // Step 2: Correct spelling and grammar of the raw transcription
                 console.log("Correcting spelling and grammar...");
-                // The prompt asks Gemini to only return the corrected text.
-                const correctionPrompt = `Correct any spelling, grammatical errors, and rephrase for natural flow in the following Burmese text. Only return the corrected text: "${rawTranscript}"`;
-                const correctionResult = await audioModel.generateContent([correctionPrompt]); 
+                // **MODIFIED:** Added specific instruction for "ဘာဗင်" and "မဟာယူနတီ" during correction
+                const correctionPrompt = `Correct any spelling, grammatical errors, and rephrase for natural flow in the following Burmese text. If the word "Bavin" is present or implied, ensure it is spelled as "ဘာဗင်". If "Mahar Unity" is present or implied, ensure it is spelled as "မဟာယူနတီ". Only return the corrected text: "${rawTranscript}"`;
+                const correctionResult = await audioModel.generateContent([correctionPrompt]);
                 correctedTranscript = correctionResult.response.text();
                 console.log("Corrected Transcript:", correctedTranscript);
 
@@ -73,7 +75,9 @@ export default async function handler(req, res) {
                 console.log("Extracting data from corrected transcript...");
                 const extractionPrompt = `You will be given Burmese text that describes either an income or an expense.
 First, confirm the text is in Burmese. Then extract and return the following fields as JSON.
-transcribe correctly for the voice input for Bavin category ,which should be ဘာဗင်
+
+For the 'Bavin' category, transcribe the voice input as 'ဘာဗင်' in the 'note' field, but *extract* the category as "Bavin".
+For the 'Mahar Unity' category, transcribe the voice input as 'မဟာယူနတီ' in the 'note' field, but *extract* the category as "Mahar Unity".
 
 Only use the following values for each field:
 
@@ -85,11 +89,11 @@ Only use the following values for each field:
 
 Respond with ONLY the JSON object in this format. Do not include any additional text or markdown formatting around the JSON (e.g., no \`\`\`json\`\`\`):
 {
-  "type": "Expense",
-  "amount": 15000,
-  "category": "Food",
-  "date": "2025-06-25", // Example date if explicitly mentioned
-  "note": "နံနက်စာအတွက်"
+    "type": "Expense",
+    "amount": 15000,
+    "category": "Food",
+    "date": "2025-06-25", // Example date if explicitly mentioned
+    "note": "နံနက်စာအတွက်"
 }
 
 Input Burmese text: "${correctedTranscript}"`;
@@ -114,9 +118,28 @@ Input Burmese text: "${correctedTranscript}"`;
                     console.warn(`Gemini returned invalid type: ${extractedDataFromGemini.type}. Defaulting to 'Expense'.`);
                     extractedDataFromGemini.type = "Expense";
                 }
-                if (!validCategories.includes(extractedDataFromGemini.category)) {
-                    console.warn(`Gemini returned invalid category: ${extractedDataFromGemini.category}. Defaulting to 'Other'.`);
-                    extractedDataFromGemini.category = "Other";
+
+                // **MODIFIED:** Combined and improved category normalization
+                if (extractedDataFromGemini.category) {
+                    let extractedCategory = extractedDataFromGemini.category;
+
+                    // Normalize Bavin
+                    if (extractedCategory.match(/ဘာဗင်|ဘာပင်း|ဘာပင်|ပါဘင်/)) {
+                        extractedCategory = "Bavin";
+                    }
+                    // Normalize Mahar Unity
+                    else if (extractedCategory.match(/မဟာယူနတီ|မဟာ ယူနတီ|မာဟာယူနတီ/)) { // Added common variations
+                        extractedCategory = "Mahar Unity";
+                    }
+
+                    if (!validCategories.includes(extractedCategory)) {
+                        console.warn(`Gemini returned invalid or unmapped category: ${extractedDataFromGemini.category}. Defaulting to 'Other'.`);
+                        extractedDataFromGemini.category = "Other";
+                    } else {
+                        extractedDataFromGemini.category = extractedCategory; // Use the normalized/validated category
+                    }
+                } else {
+                    extractedDataFromGemini.category = "Other"; // Default if category is missing
                 }
 
                 // Handle date: if not provided or invalid from Gemini, use today's date
